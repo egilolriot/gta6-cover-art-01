@@ -1,6 +1,9 @@
-// Vice Cover Studio: wires the editor. A photo (or several) and a caption become
-// a GTA-style multi-panel cover, drawn live on canvas and exported as a PNG.
-// A `?shot=` query sets up a fixed scene for a screenshot instead (./shots.js).
+// Vice Cover Studio — the editor wiring.
+//
+// A photo (or several) and a caption become a GTA-style multi-panel cover,
+// drawn live on canvas and exported as a PNG. A `?shot=` query sets up a
+// fixed scene for a screenshot instead (see shots.js).
+
 import { drawCover } from './cover.js';
 import { GRADES } from './grades.js';
 import { LAYOUTS, SIZES } from './layouts.js';
@@ -29,9 +32,13 @@ const state = {
   selected: 0,
 };
 
-let fontsReady = false;
-async function ensureFonts() {
-  if (fontsReady) return;
+const TITLE_COLOURS = { White: '#ffffff', Gold: '#ffd166', Pink: '#ff5da2' };
+
+let fontsLoaded = false;
+
+/** Loads Anton and Archivo once; the cover still draws on fallbacks. */
+async function loadFonts() {
+  if (fontsLoaded) return;
   try {
     await Promise.all([
       document.fonts.load('100px Anton'),
@@ -40,43 +47,41 @@ async function ensureFonts() {
     ]);
     await document.fonts.ready;
   } catch {
-    /* The system fallback still draws; the cover never depends on the webfont. */
+    // The system fallback still draws; the cover never depends on the webfont.
   }
-  fontsReady = true;
+  fontsLoaded = true;
 }
 
-function panelCount() {
+/** How many panels the current layout has at the current size. */
+function countPanels() {
   return LAYOUTS[state.layout].panels(state.w, state.h).length;
 }
 
-/** Keeps one panel setting per layout panel, reusing the old ones where they fit. */
-function ensurePanels() {
-  const n = panelCount();
-  const next = [];
-  for (let i = 0; i < n; i++) {
-    const old = state.panels[i];
-    next.push(
-      old ?? {
-        photo: state.photos.length ? i % state.photos.length : 0,
-        zoom: 1,
-        dx: 0,
-        dy: 0,
-      },
-    );
+/** One panel setting per layout panel, keeping the old ones where they fit. */
+function refreshPanels() {
+  const total = countPanels();
+  const kept = [];
+  for (let i = 0; i < total; i += 1) {
+    kept.push(state.panels[i] ?? {
+      photo: state.photos.length ? i % state.photos.length : 0,
+      zoom: 1,
+      dx: 0,
+      dy: 0,
+    });
   }
-  state.panels = next;
-  if (state.selected >= n) state.selected = 0;
+  state.panels = kept;
+  if (state.selected >= total) state.selected = 0;
 }
 
-function redraw() {
-  ensurePanels();
+function repaint() {
+  refreshPanels();
   drawCover(canvas, state);
-  const n = panelCount();
-  panelLabel.textContent = `Panel ${state.selected + 1} of ${n} — drag the preview to move the photo, scroll to zoom`;
+  const total = countPanels();
+  panelLabel.textContent = `Panel ${state.selected + 1} of ${total} — drag the preview to move the photo, scroll to zoom`;
   zoomInput.value = String(state.panels[state.selected]?.zoom ?? 1);
 }
 
-function setStatus(text) {
+function showStatus(text) {
   statusEl.textContent = text;
 }
 
@@ -90,19 +95,19 @@ export function loadImage(url) {
   });
 }
 
-async function addPhoto(img, name) {
+function addPhoto(img, name) {
   state.photos.push({ img, name });
   renderThumbs();
-  redraw();
+  repaint();
 }
 
 async function addSample(name) {
   try {
     const img = await loadImage(`./samples/${name}.jpg`);
-    await addPhoto(img, name);
-    setStatus(`Loaded sample photo ${name}.`);
+    addPhoto(img, name);
+    showStatus(`Loaded sample photo ${name}.`);
   } catch {
-    setStatus(`Could not load the sample photo ${name}.`);
+    showStatus(`Could not load the sample photo ${name}.`);
   }
 }
 
@@ -110,15 +115,22 @@ async function addFile(file) {
   if (!file || !file.type.startsWith('image/')) return;
   try {
     const img = await loadImage(URL.createObjectURL(file));
-    await addPhoto(img, file.name);
-    setStatus(`Loaded ${file.name}.`);
+    addPhoto(img, file.name);
+    showStatus(`Loaded ${file.name}.`);
   } catch {
-    setStatus(`Could not read ${file.name} as an image.`);
+    showStatus(`Could not read ${file.name} as an image.`);
   }
 }
 
 function renderThumbs() {
   thumbsEl.innerHTML = '';
+  if (state.photos.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'hint';
+    empty.textContent = 'No photos yet — add one below, or try a sample.';
+    thumbsEl.appendChild(empty);
+    return;
+  }
   state.photos.forEach((photo, i) => {
     const button = document.createElement('button');
     button.type = 'button';
@@ -129,23 +141,17 @@ function renderThumbs() {
     thumb.alt = photo.name;
     button.appendChild(thumb);
     button.addEventListener('click', () => {
-      ensurePanels();
+      refreshPanels();
       state.panels[state.selected].photo = i;
-      redraw();
-      setStatus(`Panel ${state.selected + 1} now shows ${photo.name}.`);
+      repaint();
+      showStatus(`Panel ${state.selected + 1} now shows ${photo.name}.`);
     });
     thumbsEl.appendChild(button);
   });
-  if (!state.photos.length) {
-    const empty = document.createElement('p');
-    empty.className = 'hint';
-    empty.textContent = 'No photos yet — add one below, or try a sample.';
-    thumbsEl.appendChild(empty);
-  }
 }
 
-/** Builds the layout, grade and size buttons from the tables. */
-function buildOptionButtons() {
+/** Builds the layout, grade, size and title-colour buttons from the tables. */
+function buildButtons() {
   const layoutBox = document.getElementById('layouts');
   for (const [key, layout] of Object.entries(LAYOUTS)) {
     const button = document.createElement('button');
@@ -156,8 +162,8 @@ function buildOptionButtons() {
     button.addEventListener('click', () => {
       state.layout = key;
       state.selected = 0;
-      syncButtons();
-      redraw();
+      markActive();
+      repaint();
     });
     layoutBox.appendChild(button);
   }
@@ -171,8 +177,8 @@ function buildOptionButtons() {
     button.style.setProperty('--accent', grade.accent);
     button.addEventListener('click', () => {
       state.grade = key;
-      syncButtons();
-      redraw();
+      markActive();
+      repaint();
     });
     gradeBox.appendChild(button);
   }
@@ -186,13 +192,13 @@ function buildOptionButtons() {
       state.sizeKey = key;
       state.w = size.w;
       state.h = size.h;
-      syncButtons();
-      redraw();
+      markActive();
+      repaint();
     });
     sizeBox.appendChild(button);
   }
   const colourBox = document.getElementById('title-colours');
-  for (const [name, colour] of Object.entries({ White: '#ffffff', Gold: '#ffd166', Pink: '#ff5da2' })) {
+  for (const [name, colour] of Object.entries(TITLE_COLOURS)) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'option swatch';
@@ -200,69 +206,69 @@ function buildOptionButtons() {
     button.style.setProperty('--swatch', colour);
     button.addEventListener('click', () => {
       state.titleColour = colour;
-      syncButtons();
-      redraw();
+      markActive();
+      repaint();
     });
     colourBox.appendChild(button);
   }
 }
 
-function syncButtons() {
-  const mark = (boxId, key) => {
+/** Marks the buttons that match the current state as active. */
+function markActive() {
+  const markBox = (boxId, table, key) => {
+    const keys = Object.keys(table);
     document.getElementById(boxId).querySelectorAll('.option').forEach((button, i) => {
-      button.classList.toggle('active', Object.keys(boxId === 'layouts' ? LAYOUTS : boxId === 'grades' ? GRADES : boxId === 'sizes' ? SIZES : { White: 0, Gold: 0, Pink: 0 })[i] === key);
+      button.classList.toggle('active', keys[i] === key);
     });
   };
-  mark('layouts', state.layout);
-  mark('grades', state.grade);
-  mark('sizes', state.sizeKey);
+  markBox('layouts', LAYOUTS, state.layout);
+  markBox('grades', GRADES, state.grade);
+  markBox('sizes', SIZES, state.sizeKey);
   document.querySelectorAll('#title-colours .option').forEach((button) => {
-    button.classList.toggle('active', button.style.getPropertyValue('--swatch').trim() === state.titleColour);
+    const swatch = button.style.getPropertyValue('--swatch').trim();
+    button.classList.toggle('active', swatch === state.titleColour);
   });
 }
 
 /** Which layout panel sits under a point of the displayed canvas. */
-function panelAt(clientX, clientY) {
+function panelUnder(clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
   const x = ((clientX - rect.left) / rect.width) * state.w;
   const y = ((clientY - rect.top) / rect.height) * state.h;
-  const panels = LAYOUTS[state.layout].panels(state.w, state.h);
-  const hit = panels.findIndex((p) => x >= p.x && x < p.x + p.w && y >= p.y && y < p.y + p.h);
+  const rects = LAYOUTS[state.layout].panels(state.w, state.h);
+  const hit = rects.findIndex((p) => x >= p.x && x < p.x + p.w && y >= p.y && y < p.y + p.h);
   return { index: hit === -1 ? 0 : hit, x, y };
 }
 
 let drag = null;
 canvas.addEventListener('pointerdown', (event) => {
-  const { index, x, y } = panelAt(event.clientX, event.clientY);
-  state.selected = index;
-  drag = { x, y, panel: state.panels[index] };
+  const found = panelUnder(event.clientX, event.clientY);
+  state.selected = found.index;
+  drag = { x: found.x, y: found.y, panel: state.panels[found.index] };
   canvas.setPointerCapture(event.pointerId);
-  redraw();
+  repaint();
 });
 canvas.addEventListener('pointermove', (event) => {
   if (!drag) return;
   const rect = canvas.getBoundingClientRect();
   const x = ((event.clientX - rect.left) / rect.width) * state.w;
   const y = ((event.clientY - rect.top) / rect.height) * state.h;
-  const panels = LAYOUTS[state.layout].panels(state.w, state.h);
-  const panel = panels[state.selected];
-  drag.panel.dx += (x - drag.x) / panel.w;
-  drag.panel.dy += (y - drag.y) / panel.h;
-  drag.panel.dx = Math.max(-0.6, Math.min(0.6, drag.panel.dx));
-  drag.panel.dy = Math.max(-0.6, Math.min(0.6, drag.panel.dy));
+  const panel = LAYOUTS[state.layout].panels(state.w, state.h)[state.selected];
+  drag.panel.dx = Math.max(-0.6, Math.min(0.6, drag.panel.dx + (x - drag.x) / panel.w));
+  drag.panel.dy = Math.max(-0.6, Math.min(0.6, drag.panel.dy + (y - drag.y) / panel.h));
   drag.x = x;
   drag.y = y;
-  redraw();
+  repaint();
 });
 canvas.addEventListener('pointerup', () => {
   drag = null;
 });
 canvas.addEventListener('wheel', (event) => {
   event.preventDefault();
-  ensurePanels();
+  refreshPanels();
   const panel = state.panels[state.selected];
   panel.zoom = Math.max(1, Math.min(3, panel.zoom * (event.deltaY < 0 ? 1.08 : 0.93)));
-  redraw();
+  repaint();
 }, { passive: false });
 
 document.getElementById('photo').addEventListener('change', async (event) => {
@@ -280,66 +286,67 @@ previewWrap.addEventListener('drop', async (event) => {
 
 document.getElementById('title').addEventListener('input', (event) => {
   state.title = event.target.value;
-  redraw();
+  repaint();
 });
 document.getElementById('subtitle').addEventListener('input', (event) => {
   state.subtitle = event.target.value;
-  redraw();
+  repaint();
 });
 document.getElementById('title-size').addEventListener('input', (event) => {
   state.titleSize = Number(event.target.value);
-  redraw();
+  repaint();
 });
 zoomInput.addEventListener('input', (event) => {
-  ensurePanels();
+  refreshPanels();
   state.panels[state.selected].zoom = Number(event.target.value);
-  redraw();
+  repaint();
 });
 document.getElementById('fit').addEventListener('click', () => {
-  ensurePanels();
-  state.panels[state.selected] = { photo: state.panels[state.selected].photo, zoom: 1, dx: 0, dy: 0 };
-  redraw();
+  refreshPanels();
+  const photo = state.panels[state.selected].photo;
+  state.panels[state.selected] = { photo, zoom: 1, dx: 0, dy: 0 };
+  repaint();
 });
 for (const [key, id] of Object.entries({ sun: 'fx-sun', palms: 'fx-palms', halftone: 'fx-halftone', grain: 'fx-grain', vignette: 'fx-vignette' })) {
   document.getElementById(id).addEventListener('change', (event) => {
     state.effects[key] = event.target.checked;
-    redraw();
+    repaint();
   });
 }
 document.getElementById('export').addEventListener('click', () => {
-  redraw();
+  repaint();
   canvas.toBlob((blob) => {
     if (!blob) {
-      setStatus('Export failed in this browser.');
+      showStatus('Export failed in this browser.');
       return;
     }
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `vice-cover-${state.w}x${state.h}.png`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    setStatus(`Saved vice-cover-${state.w}x${state.h}.png — ${state.w} × ${state.h}.`);
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `vice-cover-${state.w}x${state.h}.png`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+    showStatus(`Saved vice-cover-${state.w}x${state.h}.png — ${state.w} × ${state.h}.`);
   }, 'image/png');
 });
 
-buildOptionButtons();
-syncButtons();
+buildButtons();
+markActive();
 renderThumbs();
 
 const query = new URLSearchParams(location.search);
 const shot = query.get('shot');
 if (shot) {
-  await ensureFonts();
+  await loadFonts();
   await runShot(shot, query, {
     state,
     loadSample: addSample,
     loadImage,
-    redraw,
-    setStatus,
-    syncButtons,
+    redraw: repaint,
+    setStatus: showStatus,
+    syncButtons: markActive,
   });
 } else {
-  await ensureFonts();
-  redraw();
-  setStatus('Add a photo, pick a layout and a grade, then export your cover.');
+  await loadFonts();
+  repaint();
+  showStatus('Add a photo, pick a layout and a grade, then export your cover.');
 }
