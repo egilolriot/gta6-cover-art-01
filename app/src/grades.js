@@ -1,60 +1,87 @@
-// Vice Cover Studio — colour grades.
-//
-// Each grade is one look for the cover: a filter laid over every photo, two
-// gradients washed across the whole poster, a sun colour (or none), an accent
-// for the subtitle and the rule under the title, and the RGB of the scrim the
-// caption fades up from. All five are applied with plain Canvas 2D, so the
-// app stays offline and needs no library at all.
+// The five colour grades of a cover. A grade is a sky gradient washed over
+// the whole cover, a warm or cool tint, and the colours of the lettering, so
+// one choice re-colours panels, title and accents together.
 
-export const GRADES = {
-  sunset: {
-    label: 'Vice Sunset',
-    hint: 'Magenta dusk falling over a hot orange horizon',
-    photo: 'saturate(1.4) contrast(1.1) brightness(1.05) sepia(0.14)',
-    wash: ['rgba(255, 130, 30, 0)', 'rgba(255, 90, 100, 0.32)', 'rgba(190, 40, 145, 0.44)'],
-    dusk: ['rgba(60, 10, 60, 0)', 'rgba(60, 10, 60, 0.3)'],
-    sun: '#ffd166',
-    accent: '#ffb703',
-    scrim: '18, 5, 30',
-  },
-  neon: {
-    label: 'Neon Nights',
-    hint: 'Cyan and magenta neon glowing over deep blue',
-    photo: 'saturate(1.5) contrast(1.16) brightness(0.97) hue-rotate(-10deg)',
-    wash: ['rgba(0, 230, 255, 0)', 'rgba(0, 230, 255, 0.2)', 'rgba(255, 0, 170, 0.4)'],
-    dusk: ['rgba(12, 8, 52, 0)', 'rgba(12, 8, 52, 0.36)'],
-    sun: '#ff5da2',
-    accent: '#00e5ff',
-    scrim: '6, 5, 38',
-  },
-  gold: {
-    label: 'Gold Hour',
-    hint: 'Warm late-afternoon gold, soft and rich',
-    photo: 'saturate(1.28) contrast(1.07) brightness(1.09) sepia(0.24)',
-    wash: ['rgba(255, 216, 120, 0)', 'rgba(255, 168, 58, 0.28)', 'rgba(212, 118, 28, 0.38)'],
-    dusk: ['rgba(68, 34, 8, 0)', 'rgba(68, 34, 8, 0.28)'],
-    sun: '#fff3c4',
+/**
+ * @typedef {{
+ *   id: string,
+ *   name: string,
+ *   blurb: string,
+ *   skyTop: string,
+ *   skyBottom: string,
+ *   skyAlpha: number,
+ *   tint: string,
+ *   tintAlpha: number,
+ *   text: string,
+ *   accent: string,
+ * }} ColourGrade
+ */
+
+/** @type {ColourGrade[]} */
+export const GRADES = [
+  {
+    id: 'sunset',
+    name: 'Sunset',
+    blurb: 'Vice City golden hour',
+    skyTop: '#ff9a3d',
+    skyBottom: '#ff2e63',
+    skyAlpha: 0.4,
+    tint: '#ff7a18',
+    tintAlpha: 0.15,
+    text: '#fff7e6',
     accent: '#ffd166',
-    scrim: '36, 20, 6',
   },
-  noir: {
-    label: 'Palm Noir',
-    hint: 'High-contrast black and white with a hot red edge',
-    photo: 'saturate(0.1) contrast(1.38) brightness(1.03)',
-    wash: ['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.08)', 'rgba(255, 60, 95, 0.24)'],
-    dusk: ['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0.4)'],
-    sun: '#ffffff',
-    accent: '#ff4d6d',
-    scrim: '6, 6, 8',
+  {
+    id: 'neon',
+    name: 'Neon',
+    blurb: 'Pink and cyan after dark',
+    skyTop: '#7b2fff',
+    skyBottom: '#00e5ff',
+    skyAlpha: 0.36,
+    tint: '#ff2ea6',
+    tintAlpha: 0.15,
+    text: '#ffffff',
+    accent: '#ff2ea6',
   },
-  dusk: {
-    label: 'Pastel Dusk',
-    hint: 'Soft pink and lavender evening light',
-    photo: 'saturate(1.18) contrast(1.04) brightness(1.07) hue-rotate(14deg)',
-    wash: ['rgba(255, 185, 215, 0)', 'rgba(255, 148, 200, 0.24)', 'rgba(148, 118, 255, 0.32)'],
-    dusk: ['rgba(46, 22, 70, 0)', 'rgba(46, 22, 70, 0.26)'],
-    sun: '#ffe3f1',
-    accent: '#ff9ecf',
-    scrim: '28, 14, 46',
+  {
+    id: 'miami',
+    name: 'Miami',
+    blurb: 'Pastel pink over ocean blue',
+    skyTop: '#ff6ec7',
+    skyBottom: '#00c2ff',
+    skyAlpha: 0.36,
+    tint: '#ff6ec7',
+    tintAlpha: 0.13,
+    text: '#ffffff',
+    accent: '#ffe600',
   },
-};
+  {
+    id: 'dusk',
+    name: 'Dusk',
+    blurb: 'Purple evening, ember streets',
+    skyTop: '#3b2d5c',
+    skyBottom: '#e8734a',
+    skyAlpha: 0.4,
+    tint: '#7b5cff',
+    tintAlpha: 0.16,
+    text: '#ffe9d6',
+    accent: '#ff9a3d',
+  },
+  {
+    id: 'noir',
+    name: 'Noir',
+    blurb: 'Black, white and one red accent',
+    skyTop: '#3a3a44',
+    skyBottom: '#0c0c12',
+    skyAlpha: 0.36,
+    tint: '#000000',
+    tintAlpha: 0.18,
+    text: '#f5f5f5',
+    accent: '#e63946',
+  },
+];
+
+/** Finds a grade by id, falling back to the first one. */
+export function gradeById(id) {
+  return GRADES.find((entry) => entry.id === id) ?? GRADES[0];
+}

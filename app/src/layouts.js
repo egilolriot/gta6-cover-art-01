@@ -1,91 +1,104 @@
-// Vice Cover Studio — panel layouts and export sizes.
-//
-// A layout is a pair of functions of the cover size in pixels: `panels`
-// returns the rectangles the photos fill, `band` the strip the caption sits
-// in. Panels are painted first and the caption is painted over them on a
-// scrim, so no layout ever hides the lettering. Fractions keep every layout
-// working at all three export sizes.
+// The four panel layouts of a cover. A layout is a list of panel rectangles
+// in cover pixels, plus the band the caption sits in. Every rectangle is
+// axis-aligned; the gap between panels scales with the cover size so a
+// 1080-wide export and a 1920-wide one keep the same look.
 
-function full(w, h) {
-  return [{ x: 0, y: 0, w, h }];
+/**
+ * A panel rectangle inside the cover.
+ * @typedef {{ x: number, y: number, w: number, h: number }} PanelRect
+ */
+
+/**
+ * @typedef {{
+ *   id: string,
+ *   name: string,
+ *   blurb: string,
+ *   panels: (w: number, h: number) => PanelRect[],
+ * }} CoverLayout
+ */
+
+function gapFor(w, h) {
+  return Math.round(Math.min(w, h) * 0.012);
 }
 
-function splitVertical(w, h, topFraction) {
-  const top = Math.round(h * topFraction);
-  const half = Math.round(w / 2);
-  return [
-    { x: 0, y: 0, w, h: top },
-    { x: 0, y: top, w: half, h: h - top },
-    { x: half, y: top, w: w - half, h: h - top },
-  ];
-}
-
-function quarters(w, h) {
-  const halfW = Math.round(w / 2);
-  const halfH = Math.round(h / 2);
-  return [
-    { x: 0, y: 0, w: halfW, h: halfH },
-    { x: halfW, y: 0, w: w - halfW, h: halfH },
-    { x: 0, y: halfH, w: halfW, h: h - halfH },
-    { x: halfW, y: halfH, w: w - halfW, h: h - halfH },
-  ];
-}
-
-function columns(w, h, count) {
-  const one = Math.round(w / count);
-  const rects = [];
-  for (let i = 0; i < count; i += 1) {
-    rects.push({ x: i * one, y: 0, w: i === count - 1 ? w - i * one : one, h });
-  }
-  return rects;
-}
-
-function captionBand(w, h, topFraction) {
-  return { x: 0, y: h * topFraction, w, h: h * (1 - topFraction) };
-}
-
-export const LAYOUTS = {
-  hero: {
-    label: 'Hero',
-    hint: 'One photo, full bleed, big caption',
-    panels: full,
-    band(w, h) {
-      return captionBand(w, h, 0.64);
-    },
-  },
-  strip: {
-    label: 'Sunset Strip',
-    hint: 'Wide hero on top, two panels below',
+/** @type {CoverLayout[]} */
+export const LAYOUTS = [
+  {
+    id: 'hero',
+    name: 'Hero',
+    blurb: 'One photo, full bleed',
     panels(w, h) {
-      return splitVertical(w, h, 0.6);
-    },
-    band(w, h) {
-      return captionBand(w, h, 0.72);
+      return [{ x: 0, y: 0, w, h }];
     },
   },
-  grid: {
-    label: 'Vice Grid',
-    hint: 'Four panels, two by two',
-    panels: quarters,
-    band(w, h) {
-      return captionBand(w, h, 0.74);
-    },
-  },
-  trio: {
-    label: 'Boulevard Trio',
-    hint: 'Three tall panels side by side',
+  {
+    id: 'duo',
+    name: 'Duo',
+    blurb: 'Two photos side by side',
     panels(w, h) {
-      return columns(w, h, 3);
-    },
-    band(w, h) {
-      return captionBand(w, h, 0.7);
+      const g = gapFor(w, h);
+      const half = (w - g) / 2;
+      return [
+        { x: 0, y: 0, w: half, h },
+        { x: half + g, y: 0, w: half, h },
+      ];
     },
   },
-};
+  {
+    id: 'trio',
+    name: 'Trio',
+    blurb: 'One wide photo, two stacked',
+    panels(w, h) {
+      const g = gapFor(w, h);
+      const left = Math.round(w * 0.6 - g / 2);
+      const right = w - left - g;
+      const half = (h - g) / 2;
+      return [
+        { x: 0, y: 0, w: left, h },
+        { x: left + g, y: 0, w: right, h: half },
+        { x: left + g, y: half + g, w: right, h: half },
+      ];
+    },
+  },
+  {
+    id: 'quad',
+    name: 'Quad',
+    blurb: 'Four photos in a grid',
+    panels(w, h) {
+      const g = gapFor(w, h);
+      const halfW = (w - g) / 2;
+      const halfH = (h - g) / 2;
+      return [
+        { x: 0, y: 0, w: halfW, h: halfH },
+        { x: halfW + g, y: 0, w: halfW, h: halfH },
+        { x: 0, y: halfH + g, w: halfW, h: halfH },
+        { x: halfW + g, y: halfH + g, w: halfW, h: halfH },
+      ];
+    },
+  },
+];
 
-/** The export sizes the app offers, in pixels. */
-export const SIZES = {
-  square: { label: 'Square · 1080 × 1080', w: 1080, h: 1080 },
-  portrait: { label: 'Portrait · 1080 × 1350', w: 1080, h: 1350 },
-  wide: { label: 'Wide · 1920 × 1080', w: 1920, h: 1080 },
-};
+/** Finds a layout by id, falling back to the first one. */
+export function layoutById(id) {
+  return LAYOUTS.find((entry) => entry.id === id) ?? LAYOUTS[0];
+}
+
+/** Returns the panel rectangles of a layout at a cover size. */
+export function layoutPanels(id, w, h) {
+  return layoutById(id).panels(w, h);
+}
+
+/** How many photo panels a layout has. */
+export function layoutPanelCount(id) {
+  return layoutById(id).panels(100, 100).length;
+}
+
+/**
+ * The caption band: the rectangle the title and kicker are drawn in,
+ * anchored to the bottom of the cover with a margin that scales.
+ */
+export function captionBand(w, h) {
+  const margin = Math.round(Math.min(w, h) * 0.045);
+  const bandH = Math.round(h * 0.24);
+  return { x: margin, y: h - bandH - margin, w: w - margin * 2, h: bandH };
+}

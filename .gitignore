@@ -1,2 +1,12 @@
+# Dependencies and local build output
+node_modules/
 out/
-out2/
+dist/
+
+# Editor and OS artefacts
+.DS_Store
+Thumbs.db
+*.log
+
+# Local screenshots taken while testing (the committed ones live in screenshots/)
+/tmp/
